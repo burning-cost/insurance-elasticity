@@ -1,32 +1,33 @@
 # Databricks notebook source
 # Runs the full test suite for insurance-elasticity.
-# econml 0.16 has a pyproject.toml license field incompatible with old setuptools.
-# We upgrade setuptools first, then install.
+# econml 0.16.x uses pyproject.toml license spec incompatible with Databricks serverless setuptools.
+# Fix: install econml with --no-build-isolation so it uses the upgraded system setuptools.
 
 # COMMAND ----------
 
 import subprocess, sys, os
 
-def pip_install(*packages):
+def pip_install(*args):
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install"] + list(packages),
+        [sys.executable, "-m", "pip", "install"] + list(args),
         capture_output=True, text=True
     )
     out = result.stdout[-3000:]
-    err = result.stderr[-3000:]
+    err = result.stderr[-2000:]
     if result.returncode != 0:
         raise RuntimeError(
-            f"pip install failed for {packages}\nSTDOUT:\n{out}\nSTDERR:\n{err}"
+            f"pip install failed: {args}\nSTDOUT:\n{out}\nSTDERR:\n{err}"
         )
     return out
 
 print("Python:", sys.version)
 
-# Upgrade setuptools first to handle econml's pyproject.toml license spec
-pip_install("--upgrade", "setuptools>=70.0", "pip>=24")
+# Upgrade setuptools in system environment first
+pip_install("--upgrade", "setuptools>=70.0")
 print("setuptools upgraded")
 
-pip_install("econml>=0.15")
+# Install econml without build isolation so it uses the upgraded setuptools
+pip_install("--no-build-isolation", "econml>=0.15")
 print("econml OK")
 
 # COMMAND ----------
@@ -53,7 +54,7 @@ if not os.path.exists("/tmp/ie_repo/tests"):
 # COMMAND ----------
 
 test_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=long", "--no-header", "-p", "no:warnings"],
+    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header", "-p", "no:warnings"],
     capture_output=True, text=True,
     cwd="/tmp/ie_repo",
 )
