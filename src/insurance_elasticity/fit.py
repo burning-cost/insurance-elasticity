@@ -216,15 +216,16 @@ class RenewalElasticityEstimator:
             ATE point estimate and 95% confidence interval bounds.
         """
         self._check_fitted()
-        # econml>=0.15 requires X to be passed to ate_interval()
         X = self._X_train
+        # Use effect(X).mean() as point estimate — works for all estimator types
+        # (CausalForestDML.ate_() only works for discrete treatments; LinearDML.ate_
+        # does not exist in all versions). ate_interval() provides the CI.
         try:
             result = self._estimator.ate_interval(X=X, alpha=0.05)
-            ate_point = float(self._estimator.ate_(X=X))
         except TypeError:
             # Older econml versions may not require X
             result = self._estimator.ate_interval(alpha=0.05)
-            ate_point = float(self._estimator.ate_())
+        ate_point = float(np.mean(self._estimator.effect(X)))
         lb = float(result[0])
         ub = float(result[1])
         return ate_point, lb, ub
