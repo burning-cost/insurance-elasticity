@@ -1,39 +1,47 @@
 # Databricks notebook source
 # Runs the full test suite for insurance-elasticity.
-# Install dependencies step by step for better error visibility.
-
-# COMMAND ----------
-# MAGIC %md ## Install core dependencies
 
 # COMMAND ----------
 
-# Install heavy deps first so we can see any errors
-# econml and catboost can take 3-5 minutes to install
 import subprocess, sys
 
-def run_pip(args):
+def run_pip(args, verbose=True):
     result = subprocess.run(
         [sys.executable, "-m", "pip"] + args,
         capture_output=True, text=True
     )
-    if result.returncode != 0:
-        print("STDOUT:", result.stdout[-3000:])
-        print("STDERR:", result.stderr[-3000:])
-        raise RuntimeError(f"pip failed: {' '.join(args)}")
-    return result.stdout
+    if verbose or result.returncode != 0:
+        if result.stdout:
+            print("STDOUT:", result.stdout[-5000:])
+        if result.stderr:
+            print("STDERR:", result.stderr[-5000:])
+    return result.returncode, result.stdout, result.stderr
 
-# Install in stages
-print("Installing econml...")
-run_pip(["install", "econml>=0.15", "--quiet"])
-print("Done.")
+# Check existing packages first
+print("=== Python version ===")
+print(sys.version)
 
-print("Installing catboost...")
-run_pip(["install", "catboost>=1.2", "--quiet"])
-print("Done.")
+print("\n=== Checking econml ===")
+rc, out, err = run_pip(["install", "econml>=0.15", "--dry-run"], verbose=True)
+print(f"dry-run return code: {rc}")
 
-print("Installing insurance-elasticity and pytest...")
-run_pip(["install", "insurance-elasticity==0.1.0", "pytest", "--quiet"])
-print("Done.")
+# COMMAND ----------
+
+print("=== Installing econml (this can take 5 minutes) ===")
+rc, out, err = run_pip(["install", "econml>=0.15", "-v"], verbose=True)
+print(f"econml install return code: {rc}")
+
+# COMMAND ----------
+
+print("=== Installing catboost ===")
+rc, out, err = run_pip(["install", "catboost>=1.2", "--quiet"], verbose=True)
+print(f"catboost install return code: {rc}")
+
+# COMMAND ----------
+
+print("=== Installing insurance-elasticity ===")
+rc, out, err = run_pip(["install", "insurance-elasticity==0.1.0", "pytest", "--quiet"], verbose=True)
+print(f"install return code: {rc}")
 
 # COMMAND ----------
 
@@ -43,7 +51,6 @@ dbutils.library.restartPython()
 
 import subprocess, sys, os
 
-# Clone the repo to get the tests
 os.makedirs("/tmp/ie_repo", exist_ok=True)
 result = subprocess.run(
     ["git", "clone", "--depth=1",
@@ -51,27 +58,21 @@ result = subprocess.run(
      "/tmp/ie_repo"],
     capture_output=True, text=True
 )
-print("Clone stdout:", result.stdout)
-print("Clone stderr:", result.stderr)
-if result.returncode != 0:
-    raise RuntimeError("git clone failed")
-print("Clone OK.")
+print("Clone:", result.returncode, result.stdout, result.stderr)
 
 # COMMAND ----------
 
-# Run the tests
 result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "-x"],
+    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short"],
     capture_output=True, text=True,
     cwd="/tmp/ie_repo",
 )
-output = result.stdout
-if len(output) > 12000:
-    output = output[-12000:]
-print(output)
+out = result.stdout
+if len(out) > 12000:
+    out = out[-12000:]
+print(out)
 if result.stderr:
-    stderr = result.stderr[-2000:]
-    print("STDERR:", stderr)
+    print("STDERR:", result.stderr[-2000:])
 print("Return code:", result.returncode)
 
 # COMMAND ----------
