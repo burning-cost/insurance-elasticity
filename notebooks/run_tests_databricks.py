@@ -1,7 +1,7 @@
 # Databricks notebook source
 # Runs the full test suite for insurance-elasticity.
-# econml 0.16.x uses the new SPDX license expression format that requires packaging>=24.2.
-# Fix: upgrade packaging and setuptools first, then install econml.
+# econml 0.16.x fails on Databricks serverless due to new pyproject.toml license format.
+# Solution: pin to econml==0.15.1 which uses the classic setup.py approach.
 
 # COMMAND ----------
 
@@ -22,11 +22,8 @@ def pip_install(*args):
 
 print("Python:", sys.version)
 
-# Upgrade packaging and setuptools — both needed for econml 0.16's license spec
-pip_install("--upgrade", "packaging>=24.2", "setuptools>=77.0", "pip>=24")
-print("packaging+setuptools upgraded")
-
-pip_install("econml>=0.15")
+# Pin to 0.15.1 — last release before pyproject.toml migration
+pip_install("econml==0.15.1")
 print("econml OK")
 
 # COMMAND ----------
