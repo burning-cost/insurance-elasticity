@@ -1,5 +1,7 @@
 # Databricks notebook source
 # Runs the full test suite for insurance-elasticity.
+# econml 0.16 has a pyproject.toml license field incompatible with old setuptools.
+# We upgrade setuptools first, then install.
 
 # COMMAND ----------
 
@@ -19,11 +21,13 @@ def pip_install(*packages):
     return out
 
 print("Python:", sys.version)
-try:
-    pip_install("econml>=0.15")
-    print("econml OK")
-except RuntimeError as e:
-    raise RuntimeError(str(e)[:5000])
+
+# Upgrade setuptools first to handle econml's pyproject.toml license spec
+pip_install("--upgrade", "setuptools>=70.0", "pip>=24")
+print("setuptools upgraded")
+
+pip_install("econml>=0.15")
+print("econml OK")
 
 # COMMAND ----------
 
@@ -59,6 +63,6 @@ print(full_out[-10000:])
 # COMMAND ----------
 
 status = "PASSED" if test_result.returncode == 0 else "FAILED"
-summary_lines = [l for l in full_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED", "ERROR", "error"))]
+summary_lines = [l for l in full_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED", "ERROR"))]
 summary = "\n".join(summary_lines[-30:])
 dbutils.notebook.exit(f"{status} rc={test_result.returncode}\n\nSUMMARY:\n{summary}\n\nOUTPUT (last 3000):\n{full_out[-3000:]}")
