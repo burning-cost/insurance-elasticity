@@ -23,11 +23,16 @@ def small_df():
 
 @pytest.fixture(scope="session")
 def fitted_estimator(small_df):
-    """Fitted RenewalElasticityEstimator on the small dataset."""
+    """Fitted RenewalElasticityEstimator on the small dataset.
+
+    n_estimators must be divisible by n_folds * 2 in CausalForestDML (econml
+    uses honest splitting which splits the subsample in two). With n_folds=2,
+    n_estimators must be divisible by 4. We use 40.
+    """
     from insurance_elasticity.fit import RenewalElasticityEstimator
     est = RenewalElasticityEstimator(
         cate_model="causal_forest",
-        n_estimators=30,
+        n_estimators=40,
         catboost_iterations=80,
         n_folds=2,
         random_state=42,
