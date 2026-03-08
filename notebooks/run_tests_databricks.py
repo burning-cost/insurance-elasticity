@@ -28,7 +28,7 @@ pip_install("catboost>=1.2")
 print("catboost OK")
 pip_install("pandas>=2.0", "polars>=0.20")
 print("pandas+polars OK")
-pip_install("insurance-elasticity==0.1.0", "pytest")
+pip_install("insurance-elasticity==0.1.1", "pytest")
 print("insurance-elasticity OK")
 
 # Show versions
