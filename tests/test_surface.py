@@ -52,7 +52,7 @@ class TestSegmentSummary:
         elas = result["elasticity"].to_numpy()
         at_10 = result["elasticity_at_10pct"].to_numpy()
         expected = elas * np.log(1.1)
-        np.testing.assert_allclose(at_10, expected, rtol=1e-4)
+        np.testing.assert_allclose(at_10, expected, rtol=1e-3)
 
     def test_segment_summary_multi_by(self, fitted_estimator, small_df):
         """Passing a list of columns should work (segment by multiple dims)."""

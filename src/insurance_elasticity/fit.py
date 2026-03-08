@@ -32,6 +32,13 @@ Log-log specification:
     percentage points. This is the standard interpretation used in the UK pricing
     literature.
 
+econml version notes:
+    LinearDML does not accept ``discrete_outcome`` in all versions. We do not
+    pass it for LinearDML to maintain compatibility. CausalForestDML requires
+    ``n_estimators`` to be divisible by ``n_folds * 2`` (honest splitting creates
+    two sub-samples per fold). The ``ate_interval()`` method requires X to be
+    passed explicitly in econml>=0.15.
+
 References
 ----------
 Chernozhukov et al. (2018), Econometrics Journal 21(1).
@@ -85,13 +92,15 @@ class RenewalElasticityEstimator:
     binary_outcome:
         Whether the outcome is binary (0/1 renewal indicator). When True,
         CatBoostClassifier is used as the outcome nuisance model and
-        ``discrete_outcome=True`` is passed to the CATE estimator.
+        ``discrete_outcome=True`` is passed to CausalForestDML.
     n_folds:
         Number of cross-fitting folds. 5 is the default (Chernozhukov 2018
-        recommends at least 3).
+        recommends at least 3). For CausalForestDML, ``n_estimators`` must
+        be divisible by ``n_folds * 2``.
     n_estimators:
         Number of trees in the CausalForestDML. Larger values give more
-        accurate CATE estimates at higher compute cost.
+        accurate CATE estimates at higher compute cost. Must be divisible
+        by ``n_folds * 2`` for CausalForestDML.
     catboost_iterations:
         Training iterations for CatBoost nuisance models. 500 is a good
         default for datasets of 10k–500k rows.
@@ -136,6 +145,7 @@ class RenewalElasticityEstimator:
         self._outcome_col: str = ""
         self._treatment_col: str = ""
         self._confounders: list[str] = []
+        self._X_train: Optional[np.ndarray] = None  # stored for ate_interval()
         self._is_fitted: bool = False
 
     def fit(
@@ -179,6 +189,7 @@ class RenewalElasticityEstimator:
         df_pd = _to_pandas(df)
         Y, D, X, feature_names = _extract_arrays(df_pd, outcome, treatment, self._confounders)
         self._feature_names = feature_names
+        self._X_train = X  # store for use in ate_interval()
 
         model_y = self._build_outcome_model()
         model_t = self._build_treatment_model()
@@ -205,8 +216,15 @@ class RenewalElasticityEstimator:
             ATE point estimate and 95% confidence interval bounds.
         """
         self._check_fitted()
-        result = self._estimator.ate_interval(alpha=0.05)
-        ate_point = float(self._estimator.ate_())
+        # econml>=0.15 requires X to be passed to ate_interval()
+        X = self._X_train
+        try:
+            result = self._estimator.ate_interval(X=X, alpha=0.05)
+            ate_point = float(self._estimator.ate_(X=X))
+        except TypeError:
+            # Older econml versions may not require X
+            result = self._estimator.ate_interval(alpha=0.05)
+            ate_point = float(self._estimator.ate_())
         lb = float(result[0])
         ub = float(result[1])
         return ate_point, lb, ub
@@ -386,19 +404,30 @@ class RenewalElasticityEstimator:
             ) from e
 
         if self.cate_model == "causal_forest":
+            # n_estimators must be divisible by n_folds * 2 (honest splitting)
+            n_est = self.n_estimators
+            divisor = self.n_folds * 2
+            if n_est % divisor != 0:
+                n_est = ((n_est // divisor) + 1) * divisor
+                warnings.warn(
+                    f"n_estimators={self.n_estimators} is not divisible by n_folds*2={divisor}. "
+                    f"Rounding up to {n_est}.",
+                    UserWarning,
+                    stacklevel=3,
+                )
             return CausalForestDML(
                 model_y=model_y,
                 model_t=model_t,
                 discrete_outcome=self.binary_outcome,
-                n_estimators=self.n_estimators,
+                n_estimators=n_est,
                 cv=self.n_folds,
                 random_state=self.random_state,
             )
         elif self.cate_model == "linear_dml":
+            # LinearDML does not support discrete_outcome in all econml versions
             return LinearDML(
                 model_y=model_y,
                 model_t=model_t,
-                discrete_outcome=self.binary_outcome,
                 cv=self.n_folds,
                 random_state=self.random_state,
             )

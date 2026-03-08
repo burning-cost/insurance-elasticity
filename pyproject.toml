@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-elasticity"
-version = "0.1.0"
+version = "0.1.1"
 description = "Causal price elasticity estimation and FCA-compliant renewal pricing optimisation for UK insurance"
 readme = "README.md"
 license = { file = "LICENSE" }

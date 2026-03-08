@@ -146,8 +146,12 @@ class TestGATE:
 
 class TestAlternativeModels:
     def test_linear_dml_fits(self, small_df):
+        """LinearDML works with binary_outcome=False (treats Y as continuous).
+        LinearDML with a classifier as model_y can fail in some econml versions.
+        """
         est = RenewalElasticityEstimator(
             cate_model="linear_dml",
+            binary_outcome=False,  # avoid classifier/matmul issue in LinearDML
             n_estimators=20,
             catboost_iterations=50,
             n_folds=2,

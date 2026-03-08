@@ -3,11 +3,15 @@ Tests for FCA PS21/5-compliant renewal pricing optimiser.
 
 Verifies:
     - Optimised prices never exceed ENBP (hard regulatory constraint)
-    - Prices always exceed the floor (tech_prem * floor_loading)
+    - Prices stay at or above the floor where feasible (ENBP >= floor)
     - enbp_audit() correctly flags any price breaches
     - Profit objective produces higher margins than retention objective
     - Floor loading is respected when set above 1.0
     - Columns are correctly added to the output DataFrame
+
+Note on floor constraint: when ENBP < tech_prem (the FCA ceiling is below cost),
+the ENBP constraint overrides the floor. The test only checks rows where
+ENBP >= floor price (i.e. there is a feasible price above cost).
 """
 
 import numpy as np
@@ -30,25 +34,30 @@ class TestOptimise:
             f"ENBP constraint breached: {np.sum(optimal > enbp + 1e-6)} rows"
         )
 
-    def test_floor_constraint_respected(self, fitted_estimator, small_df):
-        """Prices should never fall below floor = tech_prem * floor_loading."""
+    def test_floor_constraint_respected_where_feasible(self, fitted_estimator, small_df):
+        """Where ENBP >= tech_prem, prices should not fall below tech_prem."""
         opt = RenewalPricingOptimiser(fitted_estimator, floor_loading=1.0)
         result = opt.optimise(small_df)
         tech_prem = result["tech_prem"].to_numpy()
+        enbp = result["enbp"].to_numpy()
         optimal = result["optimal_price"].to_numpy()
-        assert np.all(optimal >= tech_prem * 0.999), (
-            f"Floor constraint breached: {np.sum(optimal < tech_prem * 0.999)} rows"
-        )
+        floor = tech_prem * 1.0
+        # Only check rows where the floor is actually below the ENBP ceiling
+        feasible = floor <= enbp
+        if feasible.sum() > 0:
+            assert np.all(optimal[feasible] >= floor[feasible] * 0.999), (
+                f"Floor constraint breached in {np.sum(optimal[feasible] < floor[feasible] * 0.999)} "
+                f"feasible rows"
+            )
 
     def test_floor_loading_above_one_respected(self, fitted_estimator, small_df):
-        """With floor_loading=1.05, no price should be below 105% of tech_prem."""
+        """With floor_loading=1.05, no price should be below 105% of tech_prem
+        where the floor is feasible (floor <= ENBP)."""
         opt = RenewalPricingOptimiser(fitted_estimator, floor_loading=1.05)
         result = opt.optimise(small_df, objective="profit")
         tech_prem = result["tech_prem"].to_numpy()
         optimal = result["optimal_price"].to_numpy()
         floor = tech_prem * 1.05
-        # Only check where floor < ENBP (otherwise floor > ceiling, which means
-        # the ceiling is binding and we fall back to ceiling = floor anyway)
         enbp = result["enbp"].to_numpy()
         feasible = floor < enbp
         assert np.all(optimal[feasible] >= floor[feasible] * 0.999)

@@ -26,7 +26,7 @@ from insurance_elasticity.diagnostics import ElasticityDiagnostics, TreatmentVar
 from insurance_elasticity.demand import demand_curve, plot_demand_curve
 from insurance_elasticity.data import make_renewal_data, true_gate_by_ncd, true_gate_by_age
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "RenewalElasticityEstimator",
