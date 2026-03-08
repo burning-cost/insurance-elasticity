@@ -17,6 +17,11 @@ def pip_install(*args):
     return out
 
 print("Python:", sys.version)
+
+# statsmodels on Databricks serverless has a bug in deprecate_kwarg (old version).
+# econml 0.15.1 calls statsmodels internally. Upgrade statsmodels first.
+pip_install("--upgrade", "statsmodels>=0.14")
+print("statsmodels OK")
 pip_install("econml==0.15.1")
 print("econml OK")
 pip_install("catboost>=1.2")
@@ -25,6 +30,10 @@ pip_install("pandas>=2.0", "polars>=0.20")
 print("pandas+polars OK")
 pip_install("insurance-elasticity==0.1.0", "pytest")
 print("insurance-elasticity OK")
+
+# Show versions
+result = subprocess.run([sys.executable, "-m", "pip", "show", "statsmodels", "econml", "pandas", "catboost"], capture_output=True, text=True)
+print(result.stdout)
 
 # COMMAND ----------
 
@@ -41,48 +50,8 @@ if not os.path.exists("/tmp/ie_repo/tests"):
 
 # COMMAND ----------
 
-# Reproduce the session fixture manually to get the full traceback
-debug = subprocess.run(
-    [sys.executable, "-c", """
-import traceback
-import sys
-sys.path.insert(0, "src")
-from insurance_elasticity.data import make_renewal_data
-from insurance_elasticity.fit import RenewalElasticityEstimator
-
-CONFOUNDERS = ["age", "ncd_years", "vehicle_group", "channel"]
-try:
-    print("Making data...")
-    df = make_renewal_data(n=500, seed=42)
-    print("Data made, shape:", df.shape)
-    est = RenewalElasticityEstimator(
-        cate_model="causal_forest",
-        n_estimators=10,
-        catboost_iterations=20,
-        n_folds=2,
-        random_state=42,
-    )
-    print("Fitting...")
-    est.fit(df, confounders=CONFOUNDERS)
-    print("Fit OK")
-    ate = est.ate()
-    print("ATE:", ate)
-except Exception as e:
-    print("EXCEPTION:", type(e).__name__, str(e))
-    traceback.print_exc()
-"""],
-    capture_output=True, text=True,
-    cwd="/tmp/ie_repo",
-)
-print("STDOUT:", debug.stdout[-5000:])
-print("STDERR:", debug.stderr[-3000:])
-
-# COMMAND ----------
-
-# Run tests with full traceback on session fixture error
 test_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/test_fit.py::TestFitBasic::test_fit_returns_self",
-     "-v", "--tb=long", "--no-header"],
+    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header", "-p", "no:warnings"],
     capture_output=True, text=True,
     cwd="/tmp/ie_repo",
 )
@@ -91,15 +60,7 @@ print(full_out[-12000:])
 
 # COMMAND ----------
 
-all_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header", "-p", "no:warnings"],
-    capture_output=True, text=True,
-    cwd="/tmp/ie_repo",
-)
-all_out = all_result.stdout + "\n" + all_result.stderr
-status = "PASSED" if all_result.returncode == 0 else "FAILED"
-summary_lines = [l for l in all_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED"))]
-summary = "\n".join(summary_lines[-10:])
-dbutils.notebook.exit(
-    f"{status} rc={all_result.returncode}\n\nDEBUG STDOUT:\n{debug.stdout[-2000:]}\n\nFIT TEST (last 4000):\n{full_out[-4000:]}\n\nSUMMARY:\n{summary}"
-)
+status = "PASSED" if test_result.returncode == 0 else "FAILED"
+summary_lines = [l for l in full_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED", "ERROR"))]
+summary = "\n".join(summary_lines[-20:])
+dbutils.notebook.exit(f"{status} rc={test_result.returncode}\n\nSUMMARY:\n{summary}\n\nOUTPUT (last 3000):\n{full_out[-3000:]}")
