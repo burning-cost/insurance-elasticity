@@ -3,7 +3,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install "econml>=0.15" "catboost>=1.2" "insurance-elasticity==0.1.0" "pytest" --quiet
+# MAGIC %pip install "econml>=0.15" "catboost>=1.2" "insurance-elasticity==0.1.0" "pytest"
 
 # COMMAND ----------
 
@@ -20,27 +20,22 @@ clone_result = subprocess.run(
      "/tmp/ie_repo"],
     capture_output=True, text=True
 )
-if clone_result.returncode != 0:
-    dbutils.notebook.exit(f"CLONE FAILED: {clone_result.stderr}")
-
-print("Clone OK.")
+print("Clone:", clone_result.returncode, clone_result.stderr[:500])
 
 # COMMAND ----------
 
 test_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header"],
+    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=long", "--no-header", "-p", "no:warnings"],
     capture_output=True, text=True,
     cwd="/tmp/ie_repo",
 )
-out = test_result.stdout + test_result.stderr
-# Keep last 5000 chars for notebook output cell
-if len(out) > 5000:
-    out = out[-5000:]
-print(out)
+full_out = test_result.stdout + "\n" + test_result.stderr
+print(full_out[-8000:])
 
 # COMMAND ----------
 
-# Exit with test output so get_run_output can retrieve it
+# Pass summary out
+lines = [l for l in full_out.split("\n") if "passed" in l or "failed" in l or "error" in l.lower()]
+summary = "\n".join(lines[-20:])
 status = "PASSED" if test_result.returncode == 0 else "FAILED"
-exit_msg = f"Tests {status} (rc={test_result.returncode})\n\n{out}"
-dbutils.notebook.exit(exit_msg[:4000])
+dbutils.notebook.exit(f"{status} rc={test_result.returncode}\n{summary}\n\nFULL OUTPUT (last 3000):\n{full_out[-3000:]}")
