@@ -10,27 +10,28 @@ def pip_install(*args):
         [sys.executable, "-m", "pip", "install"] + list(args),
         capture_output=True, text=True
     )
-    out = result.stdout[-3000:]
+    out = result.stdout[-2000:]
     err = result.stderr[-2000:]
     if result.returncode != 0:
-        raise RuntimeError(
-            f"pip install failed: {args}\nSTDOUT:\n{out}\nSTDERR:\n{err}"
-        )
+        raise RuntimeError(f"pip failed: {args}\n{out}\n{err}")
     return out
 
 print("Python:", sys.version)
+
+# Install in a specific order to avoid dependency conflicts
 pip_install("econml==0.15.1")
 print("econml OK")
 pip_install("catboost>=1.2")
 print("catboost OK")
+# Upgrade pandas and polars to ensure interop works
+pip_install("pandas>=2.0", "polars>=0.20")
+print("pandas+polars OK")
 pip_install("insurance-elasticity==0.1.0", "pytest")
 print("insurance-elasticity OK")
 
 # Check versions
-result = subprocess.run([sys.executable, "-m", "pip", "list"], capture_output=True, text=True)
-relevant = [l for l in result.stdout.split("\n") if any(k in l.lower() for k in ("pandas", "econml", "polars", "catboost", "numpy", "scipy", "scikit"))]
-print("Installed versions:")
-print("\n".join(relevant))
+result = subprocess.run([sys.executable, "-m", "pip", "show", "pandas", "polars", "econml", "catboost"], capture_output=True, text=True)
+print(result.stdout)
 
 # COMMAND ----------
 
@@ -45,9 +46,25 @@ if not os.path.exists("/tmp/ie_repo/tests"):
     if clone.returncode != 0:
         raise RuntimeError(f"clone failed: {clone.stderr}")
 
-# First run just the fit tests with full error details
+# COMMAND ----------
+
+# Quick smoke test: can we import and run to_pandas?
+smoke = subprocess.run(
+    [sys.executable, "-c",
+     "import polars as pl, pandas as pd; "
+     "from insurance_elasticity.data import make_renewal_data; "
+     "df = make_renewal_data(n=100); "
+     "df_pd = df.to_pandas(); "
+     "print('Smoke test OK, pandas ver:', pd.__version__, 'polars ver:', pl.__version__)"],
+    capture_output=True, text=True
+)
+print("STDOUT:", smoke.stdout)
+print("STDERR:", smoke.stderr[-2000:])
+
+# COMMAND ----------
+
 test_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/test_fit.py", "-v", "--tb=long", "--no-header"],
+    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short", "--no-header", "-p", "no:warnings"],
     capture_output=True, text=True,
     cwd="/tmp/ie_repo",
 )
@@ -56,18 +73,7 @@ print(full_out[-12000:])
 
 # COMMAND ----------
 
-# Now run all tests
-all_result = subprocess.run(
-    [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=line", "--no-header", "-p", "no:warnings"],
-    capture_output=True, text=True,
-    cwd="/tmp/ie_repo",
-)
-all_out = all_result.stdout + "\n" + all_result.stderr
-status = "PASSED" if all_result.returncode == 0 else "FAILED"
-print(all_out[-10000:])
-
-# COMMAND ----------
-
-summary_lines = [l for l in all_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED", "ERROR"))]
-summary = "\n".join(summary_lines[-20:])
-dbutils.notebook.exit(f"{status} rc={all_result.returncode}\n\nFIT TEST OUTPUT (last 4000):\n{full_out[-4000:]}\n\nALL TESTS SUMMARY:\n{summary}")
+status = "PASSED" if test_result.returncode == 0 else "FAILED"
+summary_lines = [l for l in full_out.split("\n") if any(k in l for k in ("passed", "failed", "FAILED", "ERROR"))]
+summary = "\n".join(summary_lines[-25:])
+dbutils.notebook.exit(f"{status} rc={test_result.returncode}\n\nSMOKE: {smoke.stdout.strip()}\n\nSUMMARY:\n{summary}\n\nOUTPUT (last 2500):\n{full_out[-2500:]}")
