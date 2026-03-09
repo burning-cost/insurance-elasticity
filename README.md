@@ -26,7 +26,7 @@ This library wraps EconML's `CausalForestDML` and `LinearDML` to do exactly
 that, with insurance-specific defaults and an FCA-compliant pricing optimiser
 built in.
 
-**Blog post:** [Causal Price Elasticity for Insurance Renewals](https://burning-cost.github.io/2026/01/07/causal-price-elasticity-insurance-renewals/) — why OLS gives the wrong answer, the near-deterministic price problem in practice, and how to interpret CATE heterogeneity for UK personal lines.
+**Blog post:** [Your Renewal Pricing Is Flying Blind](https://burning-cost.github.io/2026/03/08/your-renewal-pricing-is-flying-blind/) — why OLS gives the wrong answer, the near-deterministic price problem in practice, and how to interpret CATE heterogeneity for UK personal lines.
 
 ---
 
