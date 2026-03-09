@@ -440,8 +440,7 @@ class RenewalElasticityEstimator:
                 )
             return DRLearner(
                 model_regression=model_y,
-                model_propensity=model_y,
-                model_final=model_t,
+                model_propensity=model_t,
                 cv=self.n_folds,
                 random_state=self.random_state,
             )
