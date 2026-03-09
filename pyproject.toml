@@ -61,6 +61,7 @@ all = [
 ]
 dev = [
     "pytest>=7.0",
+    "pyarrow>=12.0",
     "pytest-cov>=4.0",
     "econml>=0.15",
     "catboost>=1.2",
