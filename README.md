@@ -1,4 +1,5 @@
 # insurance-elasticity
+[![Tests](https://github.com/burning-cost/insurance-elasticity/actions/workflows/tests.yml/badge.svg)](https://github.com/burning-cost/insurance-elasticity/actions/workflows/tests.yml)
 
 Causal price elasticity estimation and FCA PS21/5-compliant renewal pricing
 optimisation for UK personal lines insurance.
