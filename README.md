@@ -258,6 +258,15 @@ has strong segment-level price sensitivity heterogeneity.
 
 ---
 
+
+## Related Libraries
+
+| Library | What it does |
+|---------|-------------|
+| [insurance-demand](https://github.com/burning-cost/insurance-demand) | Conversion, retention, and demand curve modelling — elasticity estimates feed directly into demand curve construction |
+| [insurance-optimise](https://github.com/burning-cost/insurance-optimise) | Constrained rate change optimisation — consumes elasticity estimates to find profit-maximising factor adjustments |
+| [insurance-causal](https://github.com/burning-cost/insurance-causal) | Double Machine Learning for causal treatment effects — the methodological foundation for causal elasticity estimation |
+
 ## Licence
 
 MIT. Built by [Burning Cost](https://burning-cost.github.io).
