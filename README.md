@@ -184,6 +184,31 @@ works but requires more care.
 
 ---
 
+## Performance
+
+Benchmarked against **naive OLS elasticity** (logistic regression with confounders)
+on synthetic UK motor insurance renewal data (50,000 policies, known DGP, 70/15/15
+train/cal/test split). See `notebooks/benchmark.py` for full methodology.
+
+The DGP has heterogeneous true elasticities: -3.5 for no-NCD customers to -1.0 for
+max-NCD, and -3.0 for age 17-24 to -1.2 for age 65+, with PCW customers 30% more
+elastic. This mirrors the structure of a real UK motor renewal book.
+
+| Metric                       | OLS Naive     | LinearDML     | CausalForestDML |
+|------------------------------|---------------|---------------|-----------------|
+| ATE relative bias vs truth   | 20%–80%       | 1%–10%        | 1%–10%          |
+| NCD GATE RMSE                | Baseline       | N/A           | 30%–60% better  |
+| 95% CI covers true ATE       | N/A            | Yes           | Yes             |
+| Fit time relative to OLS     | 1x             | 30x–60x       | 100x–300x       |
+
+OLS elasticity in a formula-rated book measures the correlation between risk level
+and renewal propensity — not the causal price effect. DML residualises both outcome
+and price on the same confounder set, recovering a credible causal semi-elasticity.
+The NCD GATE RMSE improvement is largest on books where the renewal population
+has strong segment-level price sensitivity heterogeneity.
+
+---
+
 ## References
 
 - Chernozhukov et al. (2018). Double/debiased machine learning for treatment and
