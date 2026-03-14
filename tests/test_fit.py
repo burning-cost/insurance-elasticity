@@ -15,6 +15,8 @@ import numpy as np
 import polars as pl
 import pytest
 
+pytest.importorskip("econml", reason="econml not installed — skipping elasticity tests")
+
 from insurance_elasticity.data import make_renewal_data, true_gate_by_ncd
 from insurance_elasticity.fit import RenewalElasticityEstimator
 
