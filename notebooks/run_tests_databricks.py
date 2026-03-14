@@ -18,8 +18,6 @@ def pip_install(*args):
 
 print("Python:", sys.version)
 
-# statsmodels on Databricks serverless has a bug in deprecate_kwarg (old version).
-# econml 0.15.1 calls statsmodels internally. Upgrade statsmodels first.
 pip_install("--upgrade", "statsmodels>=0.14")
 print("statsmodels OK")
 pip_install("econml==0.15.1")
@@ -28,8 +26,8 @@ pip_install("catboost>=1.2")
 print("catboost OK")
 pip_install("pandas>=2.0", "polars>=0.20")
 print("pandas+polars OK")
-pip_install("insurance-elasticity==0.1.1", "pytest")
-print("insurance-elasticity OK")
+pip_install("pytest")
+print("pytest OK")
 
 # Show versions
 result = subprocess.run([sys.executable, "-m", "pip", "show", "statsmodels", "econml", "pandas", "catboost"], capture_output=True, text=True)
@@ -47,6 +45,11 @@ if not os.path.exists("/tmp/ie_repo/tests"):
     )
     if clone.returncode != 0:
         raise RuntimeError(f"clone failed: {clone.stderr}")
+    print("Clone OK")
+
+# Install the library from the cloned repo (includes latest fixes)
+pip_install("-e", "/tmp/ie_repo")
+print("library installed from repo OK")
 
 # COMMAND ----------
 
