@@ -224,6 +224,13 @@ has strong segment-level price sensitivity heterogeneity.
   elasticity in automobile insurance. *Expert Systems with Applications*, 41(2).
 - FCA PS21/5 (2021). General Insurance Pricing Practices Policy Statement.
 
+## Worked Example
+
+[`price_elasticity_optimisation.py`](https://github.com/burning-cost/burning-cost-examples/blob/main/examples/price_elasticity_optimisation.py) — DML elasticity estimation from renewal data, ENBP-constrained optimiser, efficient frontier visualisation.
+
+A Databricks-importable version is also available: [Databricks notebook](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/price_elasticity_optimisation.py).
+
+
 ---
 
 ## Other Burning Cost libraries
