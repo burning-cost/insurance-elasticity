@@ -1,31 +1,42 @@
 # insurance-elasticity
-[![Tests](https://github.com/burning-cost/insurance-elasticity/actions/workflows/tests.yml/badge.svg)](https://github.com/burning-cost/insurance-elasticity/actions/workflows/tests.yml)
 
-Causal price elasticity estimation and FCA PS21/5-compliant renewal pricing
-optimisation for UK personal lines insurance.
+[![PyPI](https://img.shields.io/pypi/v/insurance-elasticity)](https://pypi.org/project/insurance-elasticity/)
+[![Python](https://img.shields.io/pypi/pyversions/insurance-elasticity)](https://pypi.org/project/insurance-elasticity/)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![License](https://img.shields.io/badge/license-BSD--3-blue)]()
+
+Causal price elasticity estimation and FCA PS21/5-compliant renewal pricing optimisation for UK personal lines — because naively regressing renewal flag on price in a formula-rated book measures confounding, not elasticity.
+
+---
+
+## Why bother
+
+Benchmarked against naive OLS elasticity (logistic regression with confounders) on synthetic UK motor renewal data — 50,000 policies, known DGP with heterogeneous true elasticities by NCD band and age.
+
+| Metric | OLS Naive | LinearDML | CausalForestDML |
+|--------|-----------|-----------|-----------------|
+| ATE relative bias vs truth | 20-80% | 1-10% | 1-10% |
+| NCD GATE RMSE | Baseline | N/A | 30-60% better |
+| 95% CI covers true ATE | No | Yes | Yes |
+| Fit time relative to OLS | 1x | 30x-60x | 100x-300x |
+
+OLS in a formula-rated book measures the correlation between risk level and renewal propensity, not the causal price effect. DML residualises both outcome and price on the same confounder set, recovering a credible causal semi-elasticity.
+
+---
+
+[Run on Databricks](https://github.com/burning-cost/burning-cost-examples/blob/main/notebooks/insurance_elasticity_demo.py)
 
 ---
 
 ## The problem
 
-UK motor and home insurance pricing teams want to know one thing: if we increase
-this customer's renewal price by 10%, how much does their probability of renewing
-fall?
+UK motor and home insurance pricing teams want to know one thing: if we increase this customer's renewal price by 10%, how much does their probability of renewing fall?
 
-The naive answer — run a logistic regression of renewal flag on price, read off
-the coefficient — is wrong. Risk factors drive both the price (because we re-rate
-them into the premium) and the renewal decision (because higher-risk customers
-may also have fewer alternatives). Ordinary regression conflates the two.
+The naive answer — run a logistic regression of renewal flag on price, read off the coefficient — is wrong. Risk factors drive both the price (because we re-rate them into the premium) and the renewal decision (because higher-risk customers may also have fewer alternatives). Ordinary regression conflates the two.
 
-Double Machine Learning (DML) separates them. It residualises both the outcome
-and the treatment on the same set of observable confounders, then estimates the
-causal effect from what's left. Applied to renewal data, it gives a
-semi-elasticity: the expected change in renewal probability per unit change in
-log price, controlling for everything in your rating factors.
+Double Machine Learning (DML) separates them. It residualises both the outcome and the treatment on the same set of observable confounders, then estimates the causal effect from what's left. Applied to renewal data, it gives a semi-elasticity: the expected change in renewal probability per unit change in log price, controlling for everything in your rating factors.
 
-This library wraps EconML's `CausalForestDML` and `LinearDML` to do exactly
-that, with insurance-specific defaults and an FCA-compliant pricing optimiser
-built in.
+This library wraps EconML's `CausalForestDML` and `LinearDML` to do exactly that, with insurance-specific defaults and an FCA-compliant pricing optimiser built in.
 
 **Blog post:** [Your Renewal Pricing Is Flying Blind](https://burning-cost.github.io/2026/03/08/your-renewal-pricing-is-flying-blind/) — why OLS gives the wrong answer, the near-deterministic price problem in practice, and how to interpret CATE heterogeneity for UK personal lines.
 
@@ -33,18 +44,12 @@ built in.
 
 ## What you get
 
-- **Heterogeneous elasticity estimates**: per-customer CATE and segment-level
-  GATE (group average treatment effects by NCD band, age, channel, etc.)
-- **Treatment variation diagnostics**: flags the near-deterministic price
-  problem before you fit — if your pricing grid leaves no residual variation,
-  the results are meaningless
-- **Elasticity surface**: heatmap and bar chart of elasticity across two
-  dimensions simultaneously
-- **FCA PS21/5-compliant optimiser**: maximises profit subject to the ENBP
-  constraint (offer price ≤ equivalent new business price)
+- **Heterogeneous elasticity estimates**: per-customer CATE and segment-level GATE (group average treatment effects by NCD band, age, channel, etc.)
+- **Treatment variation diagnostics**: flags the near-deterministic price problem before you fit — if your pricing grid leaves no residual variation, the results are meaningless
+- **Elasticity surface**: heatmap and bar chart of elasticity across two dimensions simultaneously
+- **FCA PS21/5-compliant optimiser**: maximises profit subject to the ENBP constraint (offer price <= equivalent new business price)
 - **ENBP audit**: per-policy FCA ICOBS 6B.2 compliance flag
-- **Portfolio demand curve**: renewal rate and expected profit across a sweep
-  of price changes
+- **Portfolio demand curve**: renewal rate and expected profit across a sweep of price changes
 
 ---
 
@@ -99,7 +104,7 @@ est.fit(df, outcome="renewed", treatment="log_price_change", confounders=confoun
 ate, lb, ub = est.ate()
 print(f"ATE: {ate:.3f}  95% CI: [{lb:.3f}, {ub:.3f}]")
 # A 1-unit increase in log price change reduces renewal by |ATE| percentage points.
-# For a 10% price increase (log change ≈ 0.095), effect ≈ ATE * 0.095.
+# For a 10% price increase (log change approx 0.095), effect approx ATE * 0.095.
 
 # 5. Segment-level elasticity
 gate = est.gate(df, by="ncd_years")
@@ -139,90 +144,69 @@ demand_df = demand_curve(est, df, price_range=(-0.25, 0.25, 50))
 
 ## The near-deterministic price problem
 
-Insurance re-rating makes the offered price nearly a deterministic function of
-the observable risk factors. When `Var(D̃) / Var(D) < 10%` — that is, less than
-10% of price variation remains after conditioning on X — DML has almost nothing
-to work with. The confidence intervals blow up and the point estimate is noise.
+Insurance re-rating makes the offered price nearly a deterministic function of the observable risk factors. When `Var(D~) / Var(D) < 10%` — that is, less than 10% of price variation remains after conditioning on X — DML has almost nothing to work with. The confidence intervals blow up and the point estimate is noise.
 
-Always run `ElasticityDiagnostics.treatment_variation_report()` first. If
-`weak_treatment` is True, do not proceed to fitting without addressing it.
+Always run `ElasticityDiagnostics.treatment_variation_report()` first. If `weak_treatment` is True, do not proceed to fitting without addressing it.
 
-The report's suggestions cover the main remedies: A/B price tests, panel data
-with within-customer variation, quasi-experiments from bulk re-rates, and the
-PS21/5 regression discontinuity.
+The report's suggestions cover the main remedies: A/B price tests, panel data with within-customer variation, quasi-experiments from bulk re-rates, and the PS21/5 regression discontinuity.
 
 ---
 
 ## FCA PS21/5 and ENBP
 
-Since January 2022, UK GI firms must not quote a renewing customer a price above
-the equivalent new business price (ENBP). The `RenewalPricingOptimiser`
-enforces this as a hard per-policy constraint. The `enbp_audit()` method returns
-a per-row compliance flag for reporting to the compliance function.
+Since January 2022, UK GI firms must not quote a renewing customer a price above the equivalent new business price (ENBP). The `RenewalPricingOptimiser` enforces this as a hard per-policy constraint. The `enbp_audit()` method returns a per-row compliance flag for reporting to the compliance function.
 
 ---
 
 ## Treatment variable
 
-The standard treatment is `log(offer_price / last_year_price)`. This gives a
-semi-elasticity directly: a 1-unit change in D (100% price increase) changes
-renewal probability by theta percentage points. For the typical 5–20% renewal
-re-rates in UK personal lines, interpret as: a 10% increase changes renewal
-probability by approximately `ATE * log(1.1) ≈ ATE * 0.095`.
+The standard treatment is `log(offer_price / last_year_price)`. This gives a semi-elasticity directly: a 1-unit change in D (100% price increase) changes renewal probability by theta percentage points. For the typical 5-20% renewal re-rates in UK personal lines, interpret as: a 10% increase changes renewal probability by approximately `ATE * log(1.1) approx ATE * 0.095`.
 
 ---
 
 ## Model choices
 
-**CausalForestDML** (default): non-parametric, requires no pre-specified feature
-interactions, provides valid pointwise confidence intervals via honest splitting.
-Right for the elasticity surface. Computationally heavier.
+**CausalForestDML** (default): non-parametric, requires no pre-specified feature interactions, provides valid pointwise confidence intervals via honest splitting. Right for the elasticity surface. Computationally heavier.
 
-**LinearDML**: assumes constant elasticity (or heterogeneity only through
-explicitly interacted features). Much faster. Right for quick portfolio-level
-ATE estimation.
+**LinearDML**: assumes constant elasticity (or heterogeneity only through explicitly interacted features). Much faster. Right for quick portfolio-level ATE estimation.
 
-**CatBoost nuisance models**: UK insurance data is full of categoricals (region,
-vehicle group, occupation, payment method). CatBoost handles them natively. The
-alternative is to one-hot encode everything and use gradient boosting, which
-works but requires more care.
+**CatBoost nuisance models**: UK insurance data is full of categoricals (region, vehicle group, occupation, payment method). CatBoost handles them natively. The alternative is to one-hot encode everything and use gradient boosting, which works but requires more care.
 
 ---
 
 ## Performance
 
-Benchmarked against **naive OLS elasticity** (logistic regression with confounders)
-on synthetic UK motor insurance renewal data (50,000 policies, known DGP, 70/15/15
-train/cal/test split). See `notebooks/benchmark.py` for full methodology.
+Benchmarked against **naive OLS elasticity** (logistic regression with confounders) on synthetic UK motor insurance renewal data (50,000 policies, known DGP, 70/15/15 train/cal/test split). See `notebooks/benchmark.py` for full methodology.
 
-The DGP has heterogeneous true elasticities: -3.5 for no-NCD customers to -1.0 for
-max-NCD, and -3.0 for age 17-24 to -1.2 for age 65+, with PCW customers 30% more
-elastic. This mirrors the structure of a real UK motor renewal book.
+The DGP has heterogeneous true elasticities: -3.5 for no-NCD customers to -1.0 for max-NCD, and -3.0 for age 17-24 to -1.2 for age 65+, with PCW customers 30% more elastic. This mirrors the structure of a real UK motor renewal book.
 
-| Metric                       | OLS Naive     | LinearDML     | CausalForestDML |
-|------------------------------|---------------|---------------|-----------------|
-| ATE relative bias vs truth   | 20%–80%       | 1%–10%        | 1%–10%          |
-| NCD GATE RMSE                | Baseline       | N/A           | 30%–60% better  |
-| 95% CI covers true ATE       | N/A            | Yes           | Yes             |
-| Fit time relative to OLS     | 1x             | 30x–60x       | 100x–300x       |
+| Metric | OLS Naive | LinearDML | CausalForestDML |
+|--------|-----------|-----------|-----------------|
+| ATE relative bias vs truth | 20-80% | 1-10% | 1-10% |
+| NCD GATE RMSE | Baseline | N/A | 30-60% better |
+| 95% CI covers true ATE | N/A | Yes | Yes |
+| Fit time relative to OLS | 1x | 30x-60x | 100x-300x |
 
-OLS elasticity in a formula-rated book measures the correlation between risk level
-and renewal propensity — not the causal price effect. DML residualises both outcome
-and price on the same confounder set, recovering a credible causal semi-elasticity.
-The NCD GATE RMSE improvement is largest on books where the renewal population
-has strong segment-level price sensitivity heterogeneity.
+OLS elasticity in a formula-rated book measures the correlation between risk level and renewal propensity — not the causal price effect. DML residualises both outcome and price on the same confounder set, recovering a credible causal semi-elasticity. The NCD GATE RMSE improvement is largest on books where the renewal population has strong segment-level price sensitivity heterogeneity.
 
 ---
 
 ## References
 
-- Chernozhukov et al. (2018). Double/debiased machine learning for treatment and
-  structural parameters. *Econometrics Journal*, 21(1).
-- Athey & Wager (2019). Estimating treatment effects with causal forests.
-  *Annals of Statistics*, 47(2).
-- Guelman & Guillén (2014). A causal inference approach to measure price
-  elasticity in automobile insurance. *Expert Systems with Applications*, 41(2).
+- Chernozhukov et al. (2018). Double/debiased machine learning for treatment and structural parameters. *Econometrics Journal*, 21(1).
+- Athey & Wager (2019). Estimating treatment effects with causal forests. *Annals of Statistics*, 47(2).
+- Guelman & Guillén (2014). A causal inference approach to measure price elasticity in automobile insurance. *Expert Systems with Applications*, 41(2).
 - FCA PS21/5 (2021). General Insurance Pricing Practices Policy Statement.
+
+---
+
+## Related Libraries
+
+| Library | What it does |
+|---------|-------------|
+| [insurance-demand](https://github.com/burning-cost/insurance-demand) | Conversion, retention, and demand curve modelling — elasticity estimates feed directly into demand curve construction |
+| [insurance-optimise](https://github.com/burning-cost/insurance-optimise) | Constrained rate change optimisation — consumes elasticity estimates to find profit-maximising factor adjustments |
+| [insurance-causal](https://github.com/burning-cost/insurance-causal) | Double Machine Learning for causal treatment effects — the methodological foundation for causal elasticity estimation |
 
 ---
 
@@ -259,20 +243,10 @@ has strong segment-level price sensitivity heterogeneity.
 | [insurance-governance](https://github.com/burning-cost/insurance-governance) | PRA SS1/23 model governance and validation reports |
 | [insurance-monitoring](https://github.com/burning-cost/insurance-monitoring) | Model monitoring: PSI, A/E ratios, Gini drift test |
 
-[All libraries and blog posts →](https://burning-cost.github.io)
+[All libraries and blog posts](https://burning-cost.github.io)
 
 ---
-
-
-## Related Libraries
-
-| Library | What it does |
-|---------|-------------|
-| [insurance-demand](https://github.com/burning-cost/insurance-demand) | Conversion, retention, and demand curve modelling — elasticity estimates feed directly into demand curve construction |
-| [insurance-optimise](https://github.com/burning-cost/insurance-optimise) | Constrained rate change optimisation — consumes elasticity estimates to find profit-maximising factor adjustments |
-| [insurance-causal](https://github.com/burning-cost/insurance-causal) | Double Machine Learning for causal treatment effects — the methodological foundation for causal elasticity estimation |
 
 ## Licence
 
 MIT. Built by [Burning Cost](https://burning-cost.github.io).
-
