@@ -130,6 +130,11 @@ print(f"Breaches: {(audit['compliant'] == False).sum()} / {len(audit)}")
 demand_df = demand_curve(est, df, price_range=(-0.25, 0.25, 50))
 ```
 
+## Worked Example
+
+[`price_elasticity_optimisation.py`](https://github.com/burning-cost/burning-cost-examples/blob/main/examples/price_elasticity_optimisation.py) covers the complete DML workflow: elasticity estimation on a synthetic 50,000-policy motor book, heterogeneous CATE broken down by NCD band, channel, and age, an ENBP-constrained profit-maximising optimiser, and an efficient frontier showing the renewal rate versus expected profit trade-off across price change scenarios. Run it before fitting on your own data to understand how each component behaves.
+
+
 ---
 
 ## The near-deterministic price problem
