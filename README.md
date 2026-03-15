@@ -257,3 +257,7 @@ A Databricks-importable version is also available: [Databricks notebook](https:/
 ## Licence
 
 MIT. Built by [Burning Cost](https://burning-cost.github.io).
+
+---
+
+**Need help implementing this in production?** [Talk to us](https://burning-cost.github.io/work-with-us/).
