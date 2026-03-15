@@ -72,7 +72,11 @@ def demand_curve(
     y_observed = df["renewed"].to_numpy().astype(float)
     overall_rate = float(np.mean(y_observed))
 
-    # Smoothed baseline renewal probability
+    # Smoothed baseline renewal probability.
+    # Known limitation (P1-1): y_observed is a raw 0/1 indicator, so the per-
+    # customer baseline is noisy. The portfolio average is approximately correct
+    # because smoothing pulls each customer toward the overall renewal rate.
+    # Individual-level accuracy would require a calibrated nuisance model score.
     p0 = 0.2 * overall_rate + 0.8 * y_observed
 
     tech_prem = df["tech_prem"].to_numpy() if "tech_prem" in df.columns else np.ones(len(df))

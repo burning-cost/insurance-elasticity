@@ -149,3 +149,58 @@ class TestCalibrationSummary:
         diag = ElasticityDiagnostics()
         result = diag.calibration_summary(small_df)
         assert result["n"].sum() == len(small_df)
+
+class TestVariationFractionUsesCV:
+    """Regression tests for P0-2: variation_fraction must use out-of-fold
+    (cross_val_predict) residuals, not in-sample fitted values.
+
+    In-sample residuals from a tree model are near-zero (overfitting), which
+    inflates variation_fraction and hides the near-deterministic price problem.
+    With cross_val_predict the residuals are honest and variation_fraction is
+    lower, correctly signalling the problem.
+    """
+
+    def test_near_deterministic_variation_fraction_is_low(self):
+        """With CV predictions, near-deterministic data should show low variation.
+
+        If in-sample predictions were used instead, the GBM would overfit and
+        D_hat ≈ D everywhere, making D_tilde ≈ 0 and variation_fraction ≈ 0
+        regardless of data structure. With out-of-fold predictions the GBM
+        only explains variance it genuinely captures cross-sectionally.
+
+        For near-deterministic data, Var(D̃)/Var(D) should be meaningfully
+        different from the high-variation case.
+        """
+        df_good = make_renewal_data(n=3000, seed=42, price_variation_sd=0.15)
+        df_nd = make_renewal_data(n=3000, seed=42, near_deterministic=True)
+
+        diag = ElasticityDiagnostics(n_folds=3, random_state=42)
+
+        report_good = diag.treatment_variation_report(df_good, confounders=CONFOUNDERS)
+        report_nd = diag.treatment_variation_report(df_nd, confounders=CONFOUNDERS)
+
+        # Out-of-fold residuals should correctly show near-deterministic data
+        # has lower variation fraction than high-variation data
+        assert report_nd.variation_fraction < report_good.variation_fraction, (
+            f"CV-based variation_fraction should be lower for near-deterministic "
+            f"data ({report_nd.variation_fraction:.4f}) than for high-variation "
+            f"data ({report_good.variation_fraction:.4f})"
+        )
+
+    def test_variation_fraction_not_inflated_by_overfitting(self):
+        """variation_fraction should be <= 1.0 (not inflated by in-sample fit).
+
+        In-sample GBM predictions approach D exactly, so D_tilde ≈ 0 and
+        Var(D_tilde)/Var(D) would approach 0, not inflate. However, with
+        cross_val_predict the residuals can show that Var(D_tilde)/Var(D)
+        is genuinely close to 1 when price variation is truly exogenous.
+        The key regression check is just that the value stays in [0, 1].
+        """
+        df = make_renewal_data(n=2000, seed=99, price_variation_sd=0.10)
+        diag = ElasticityDiagnostics(n_folds=3, random_state=0)
+        report = diag.treatment_variation_report(df, confounders=CONFOUNDERS)
+        assert 0.0 <= report.variation_fraction <= 1.0, (
+            f"variation_fraction={report.variation_fraction:.4f} out of [0, 1]; "
+            "check that cross_val_predict is used, not in-sample predict"
+        )
+

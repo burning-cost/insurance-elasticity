@@ -14,6 +14,10 @@ Design notes:
       columns = second dim. Works best with categorical dimensions.
     - plot_gate uses horizontal bars with error bars for the 95% CI. Easier to
       read than vertical bars when segment labels are long.
+    - Group-level CIs use SE = SD(CATE_i) / sqrt(n), not an average of
+      individual CIs. Averaging individual CIs fails to narrow with group size,
+      giving the false impression that large segments are as uncertain as small
+      ones.
 """
 
 from __future__ import annotations
@@ -55,6 +59,11 @@ class ElasticitySurface:
     ) -> pl.DataFrame:
         """Return a summary table of elasticity by segment.
 
+        Group-level confidence intervals are computed using the standard error
+        of the group mean: SE(GATE) = SD(CATE_i) / sqrt(n). This is the correct
+        approach — averaging individual-level CIs would not narrow with group
+        size and would overstate uncertainty for large segments.
+
         Parameters
         ----------
         df:
@@ -73,23 +82,26 @@ class ElasticitySurface:
             raise RuntimeError("Estimator is not fitted. Call .fit() first.")
 
         cate_vals = self.estimator.cate(df)
-        lb_vals, ub_vals = self.estimator.cate_interval(df)
 
         df_aug = df.with_columns([
             pl.Series("_cate", cate_vals),
-            pl.Series("_ci_lower", lb_vals),
-            pl.Series("_ci_upper", ub_vals),
         ])
 
         if by is None:
-            # Portfolio summary
+            # Portfolio summary: use SE = SD / sqrt(n) for the CI
+            mean_cate = float(np.mean(cate_vals))
+            std_cate = float(np.std(cate_vals, ddof=1))
+            n = len(cate_vals)
+            # P1-3 fix: proper portfolio CI using SE of the mean
+            ci_lower = mean_cate - 1.96 * std_cate / np.sqrt(n)
+            ci_upper = mean_cate + 1.96 * std_cate / np.sqrt(n)
             return pl.DataFrame({
                 "segment": ["portfolio"],
-                "elasticity": [float(np.mean(cate_vals))],
-                "ci_lower": [float(np.mean(lb_vals))],
-                "ci_upper": [float(np.mean(ub_vals))],
-                "n": [len(df)],
-                "elasticity_at_10pct": [float(np.mean(cate_vals) * 0.0953)],  # log(1.1)
+                "elasticity": [mean_cate],
+                "ci_lower": [ci_lower],
+                "ci_upper": [ci_upper],
+                "n": [n],
+                "elasticity_at_10pct": [mean_cate * 0.0953],  # log(1.1)
             })
 
         if isinstance(by, str):
@@ -97,18 +109,22 @@ class ElasticitySurface:
         else:
             group_cols = list(by)
 
+        # P1-3 fix: compute group CI using SE = SD(CATE_i) / sqrt(n).
+        # This narrows correctly as groups grow, unlike averaging individual CIs.
         result = (
             df_aug
             .group_by(group_cols)
             .agg([
                 pl.col("_cate").mean().alias("elasticity"),
-                pl.col("_ci_lower").mean().alias("ci_lower"),
-                pl.col("_ci_upper").mean().alias("ci_upper"),
+                pl.col("_cate").std().alias("_std_cate"),
                 pl.len().alias("n"),
             ])
-            .with_columns(
-                (pl.col("elasticity") * 0.0953).alias("elasticity_at_10pct")
-            )
+            .with_columns([
+                (pl.col("elasticity") - 1.96 * pl.col("_std_cate") / pl.col("n").sqrt()).alias("ci_lower"),
+                (pl.col("elasticity") + 1.96 * pl.col("_std_cate") / pl.col("n").sqrt()).alias("ci_upper"),
+                (pl.col("elasticity") * 0.0953).alias("elasticity_at_10pct"),
+            ])
+            .drop("_std_cate")
             .sort(group_cols)
         )
         return result

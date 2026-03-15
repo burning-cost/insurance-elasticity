@@ -49,6 +49,7 @@ KB entries 593, 594, 600.
 
 from __future__ import annotations
 
+from math import sqrt
 from typing import Optional, Sequence, Union
 import warnings
 
@@ -142,10 +143,11 @@ class RenewalElasticityEstimator:
 
         self._estimator: Optional[object] = None
         self._feature_names: list[str] = []
+        self._feature_columns: list[str] = []  # stored for prediction alignment
         self._outcome_col: str = ""
         self._treatment_col: str = ""
         self._confounders: list[str] = []
-        self._X_train: Optional[np.ndarray] = None  # stored for ate_interval()
+        self._X_train: Optional[np.ndarray] = None  # stored temporarily for ate_interval()
         self._is_fitted: bool = False
 
     def fit(
@@ -187,9 +189,12 @@ class RenewalElasticityEstimator:
         self._confounders = list(confounders)
 
         df_pd = _to_pandas(df)
-        Y, D, X, feature_names = _extract_arrays(df_pd, outcome, treatment, self._confounders)
+        Y, D, X, feature_names, feature_columns = _extract_arrays(
+            df_pd, outcome, treatment, self._confounders
+        )
         self._feature_names = feature_names
-        self._X_train = X  # store for use in ate_interval()
+        self._feature_columns = feature_columns  # store for prediction alignment (P1-2)
+        self._X_train = X  # store temporarily for use in ate_interval()
 
         model_y = self._build_outcome_model()
         model_t = self._build_treatment_model()
@@ -220,14 +225,28 @@ class RenewalElasticityEstimator:
         # Use effect(X).mean() as point estimate — works for all estimator types
         # (CausalForestDML.ate_() only works for discrete treatments; LinearDML.ate_
         # does not exist in all versions). ate_interval() provides the CI.
-        try:
-            result = self._estimator.ate_interval(X=X, alpha=0.05)
-        except TypeError:
-            # Older econml versions may not require X
+        #
+        # P2-2: _X_train is released after the first ate() call to avoid holding
+        # the full training array in memory. Subsequent calls use the estimator's
+        # internal cached data (no X kwarg). On the first call, we pass X for
+        # econml versions that require it.
+        if X is not None:
+            try:
+                result = self._estimator.ate_interval(X=X, alpha=0.05)
+            except TypeError:
+                result = self._estimator.ate_interval(alpha=0.05)
+            ate_point = float(np.mean(self._estimator.effect(X)))
+            # P2-2 fix: release training data reference to avoid memory leak
+            self._X_train = None
+        else:
+            # Second call: training data already released; use estimator's cached data
             result = self._estimator.ate_interval(alpha=0.05)
-        ate_point = float(np.mean(self._estimator.effect(X)))
-        lb = float(result[0])
-        ub = float(result[1])
+            ate_point = float(result[0].mean() + result[1].mean()) / 2  # midpoint fallback
+        # P0-1 fix: ate_interval() returns arrays of shape (n_samples, 1).
+        # Take the mean across all rows to get the portfolio-average CI, not
+        # the first row's CI.
+        lb = float(result[0].mean())
+        ub = float(result[1].mean())
         return ate_point, lb, ub
 
     def cate(self, df: DataFrameLike) -> np.ndarray:
@@ -250,7 +269,10 @@ class RenewalElasticityEstimator:
         """
         self._check_fitted()
         df_pd = _to_pandas(df)
-        _, _, X, _ = _extract_arrays(df_pd, self._outcome_col, self._treatment_col, self._confounders)
+        _, _, X, _, _ = _extract_arrays(
+            df_pd, self._outcome_col, self._treatment_col, self._confounders,
+            feature_columns=self._feature_columns,
+        )
         return self._estimator.effect(X).flatten()
 
     def cate_interval(self, df: DataFrameLike, alpha: float = 0.05) -> tuple[np.ndarray, np.ndarray]:
@@ -269,7 +291,10 @@ class RenewalElasticityEstimator:
         """
         self._check_fitted()
         df_pd = _to_pandas(df)
-        _, _, X, _ = _extract_arrays(df_pd, self._outcome_col, self._treatment_col, self._confounders)
+        _, _, X, _, _ = _extract_arrays(
+            df_pd, self._outcome_col, self._treatment_col, self._confounders,
+            feature_columns=self._feature_columns,
+        )
 
         if not hasattr(self._estimator, "effect_interval"):
             warnings.warn(
@@ -295,6 +320,10 @@ class RenewalElasticityEstimator:
         This is the primary output for pricing actuaries building segment-level
         discount strategies.
 
+        The group-level CI is computed using SE(GATE) = SD(CATE_i) / sqrt(n),
+        which correctly narrows as group size grows. Averaging individual CIs
+        would not narrow with n.
+
         Parameters
         ----------
         df:
@@ -311,23 +340,27 @@ class RenewalElasticityEstimator:
         self._check_fitted()
         df_pl = _to_polars(df)
         cate_vals = self.cate(df)
-        lb_vals, ub_vals = self.cate_interval(df)
 
         df_with_cate = df_pl.with_columns([
             pl.Series("_cate", cate_vals),
-            pl.Series("_ci_lower", lb_vals),
-            pl.Series("_ci_upper", ub_vals),
         ])
 
+        # P1-3 fix: compute group CI using SE = SD(CATE_i) / sqrt(n).
+        # This produces CIs that narrow properly with group size, unlike averaging
+        # individual-level CIs which stay wide regardless of n.
         result = (
             df_with_cate
             .group_by(by)
             .agg([
                 pl.col("_cate").mean().alias("elasticity"),
-                pl.col("_ci_lower").mean().alias("ci_lower"),
-                pl.col("_ci_upper").mean().alias("ci_upper"),
+                pl.col("_cate").std().alias("_std_cate"),
                 pl.len().alias("n"),
             ])
+            .with_columns([
+                (pl.col("elasticity") - 1.96 * pl.col("_std_cate") / pl.col("n").sqrt()).alias("ci_lower"),
+                (pl.col("elasticity") + 1.96 * pl.col("_std_cate") / pl.col("n").sqrt()).alias("ci_upper"),
+            ])
+            .drop("_std_cate")
             .sort(by)
         )
         return result
@@ -480,14 +513,22 @@ def _extract_arrays(
     outcome: str,
     treatment: str,
     confounders: list[str],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str]]:
+    feature_columns: Optional[list[str]] = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[str], list[str]]:
     """Extract Y, D, X arrays from a pandas DataFrame.
 
     Categorical/string columns in confounders are one-hot encoded.
 
+    At fit time, ``feature_columns`` is None and the full encoded column list
+    is derived from the training data. At predict time, pass the stored
+    ``feature_columns`` to reindex the encoded frame — this prevents category
+    set misalignment if a scoring batch is missing some levels.
+
     Returns
     -------
-    Y, D, X, feature_names
+    Y, D, X, feature_names, feature_columns
+        feature_names and feature_columns are both the column list (identical
+        values); feature_columns is returned separately so callers can store it.
     """
     import pandas as pd
 
@@ -497,12 +538,21 @@ def _extract_arrays(
     subset = df_pd[confounders].copy()
     obj_cols = subset.select_dtypes(include=["object", "category"]).columns.tolist()
     if obj_cols:
-        subset = pd.get_dummies(subset, columns=obj_cols, drop_first=True)
+        # P1-2 fix: do not use drop_first=True. Using drop_first=True can cause
+        # column misalignment between training and scoring when category sets
+        # differ (e.g., a level absent in a scoring batch causes a shifted
+        # column order). Instead we keep all dummies and align by name.
+        subset = pd.get_dummies(subset, columns=obj_cols, drop_first=False)
 
     # Fill any NaNs with column mean (defensive)
     subset = subset.fillna(subset.mean())
 
-    X = subset.values.astype(float)
-    feature_names = list(subset.columns)
+    if feature_columns is not None:
+        # Prediction time: reindex to match training column set exactly.
+        # Missing columns (unseen levels) are filled with 0.
+        subset = subset.reindex(columns=feature_columns, fill_value=0)
 
-    return Y, D, X, feature_names
+    X = subset.values.astype(float)
+    cols = list(subset.columns)
+
+    return Y, D, X, cols, cols

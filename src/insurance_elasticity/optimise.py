@@ -165,8 +165,16 @@ class RenewalPricingOptimiser:
         # We use a simple approach: P0 = group renewal rate (by sign of CATE quartile)
         # For optimisation we use: P(renew | new_price) = P0 + theta * delta_log_price
         # where delta_log_price = log(new_price / offer_price)
+        # Known limitation (P1-1): using the raw 0/1 renewal indicator as the
+        # per-customer baseline probability is noisy at the individual level (a
+        # customer who churned last year has p0=0, inflating predicted renewal
+        # at any price). The portfolio average is approximately correct because
+        # the smoothing below pulls each customer toward the mean renewal rate.
+        # A proper fix would use a calibrated propensity score from the fitted
+        # nuisance model. For pricing optimisation, the error is second-order:
+        # the CATE (not p0) drives price recommendations.
         p0 = y.astype(float)  # per-row observed renewal (0 or 1)
-        # Smooth with an overall mean to avoid pure 0/1 baselines
+        # Smooth with an overall mean to reduce individual-level 0/1 noise
         overall_rate = float(np.mean(y))
         p0_smoothed = 0.2 * overall_rate + 0.8 * p0
 

@@ -28,7 +28,7 @@ import polars as pl
 
 try:
     from sklearn.ensemble import GradientBoostingRegressor
-    from sklearn.model_selection import cross_val_score
+    from sklearn.model_selection import cross_val_score, cross_val_predict
     _SKLEARN_AVAILABLE = True
 except ImportError:
     _SKLEARN_AVAILABLE = False
@@ -155,10 +155,15 @@ class ElasticityDiagnostics:
     ) -> TreatmentVariationReport:
         """Compute the treatment variation diagnostic.
 
-        Fits a nuisance model E[D|X] and reports the fraction of treatment
-        variation that remains after conditioning on observable confounders.
-        Low residual variation (Var(D̃)/Var(D) < 0.10) indicates the
-        near-deterministic price problem.
+        Fits a nuisance model E[D|X] using out-of-fold cross-validation
+        (``cross_val_predict``) and reports the fraction of treatment variation
+        that remains after conditioning on observable confounders. Low residual
+        variation (Var(D̃)/Var(D) < 0.10) indicates the near-deterministic price
+        problem.
+
+        Using out-of-fold predictions is critical: in-sample fitted values
+        overfit and inflate Var(D̃)/Var(D), hiding the near-deterministic price
+        problem that DML is most vulnerable to.
 
         Parameters
         ----------
@@ -218,9 +223,11 @@ class ElasticityDiagnostics:
             )
             nuisance_r2 = float(np.clip(np.mean(cv_r2_scores), 0.0, 1.0))
 
-            # Fit on full data to get residuals
-            nuisance_model.fit(X, D)
-            D_hat = nuisance_model.predict(X)
+            # P0-2 fix: use out-of-fold predictions for residuals, not in-sample.
+            # In-sample predictions overfit and inflate Var(D̃)/Var(D), masking
+            # the near-deterministic price problem. cross_val_predict gives
+            # honest out-of-fold D_hat for each observation.
+            D_hat = cross_val_predict(nuisance_model, X, D, cv=self.n_folds)
         else:
             # Fallback: OLS residuals (much less accurate but avoids hard sklearn dep)
             D_hat = np.full_like(D, np.mean(D))

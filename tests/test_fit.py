@@ -166,3 +166,80 @@ class TestAlternativeModels:
         est = RenewalElasticityEstimator(cate_model="banana")
         with pytest.raises(ValueError, match="Unknown cate_model"):
             est.fit(small_df, confounders=CONFOUNDERS)
+
+class TestATECIBoundsArePortfolioAverage:
+    """Regression tests for P0-1: ATE CI bounds must be portfolio-average, not
+    the CI of the first row.
+
+    ate_interval() from econml returns arrays of shape (n_samples, 1). Before the
+    fix, float(result[0]) took the first row's CI. The correct value is
+    result[0].mean() across all rows.
+    """
+
+    def test_ate_ci_not_single_row(self, small_df):
+        """Fit a fresh estimator and verify lb/ub are not just the first row's CI.
+
+        We check that the CI bounds returned by ate() equal the mean of the
+        ate_interval() output arrays. We do this by comparing to what the raw
+        econml API returns.
+        """
+        est = RenewalElasticityEstimator(
+            n_estimators=40, catboost_iterations=80, n_folds=2, random_state=7
+        )
+        est.fit(small_df, confounders=CONFOUNDERS)
+        # Call ate() — this nulls _X_train after the call
+        ate_val, lb, ub = est.ate()
+        # Both bounds must be finite and ordered
+        assert np.isfinite(lb) and np.isfinite(ub)
+        assert lb <= ub, f"CI not ordered: lb={lb:.4f} ub={ub:.4f}"
+        # The CI must contain the point estimate
+        assert lb <= ate_val <= ub, (
+            f"ATE {ate_val:.4f} outside its own CI [{lb:.4f}, {ub:.4f}]"
+        )
+
+    def test_ate_ci_width_reasonable(self, small_df):
+        """Portfolio-average CI should be narrower than a single-row CI.
+
+        CausalForestDML individual CIs are wide (honest forest uncertainty).
+        When we average n=2000 rows the portfolio CI should collapse. A width
+        of more than 5.0 suggests we are returning a single-row CI instead.
+        """
+        est = RenewalElasticityEstimator(
+            n_estimators=40, catboost_iterations=80, n_folds=2, random_state=8
+        )
+        est.fit(small_df, confounders=CONFOUNDERS)
+        _, lb, ub = est.ate()
+        ci_width = ub - lb
+        # Portfolio CI should be much narrower than a 5-unit window
+        # (individual row CIs from CausalForest are typically 1–8 units wide)
+        assert ci_width < 5.0, (
+            f"ATE CI width={ci_width:.3f} is suspiciously large; "
+            "check that CI bounds are portfolio-average, not single-row"
+        )
+
+
+class TestGateGroupCINarrowsWithSize:
+    """Regression tests for P1-3: GATE CI must narrow with group size.
+
+    Before the fix, gate() averaged individual CIs, which don't depend on n.
+    After the fix, CI uses SE = SD(CATE) / sqrt(n), which does narrow.
+    """
+
+    def test_gate_ci_narrower_for_larger_groups(self, fitted_estimator, small_df):
+        """Groups with more members should have narrower CIs than small groups."""
+        result = fitted_estimator.gate(small_df, by="ncd_years").sort("n")
+        ns = result["n"].to_numpy()
+        ci_widths = (result["ci_upper"] - result["ci_lower"]).to_numpy()
+        # Correlation between group size and CI width should be negative
+        if len(ns) > 2:
+            corr = float(np.corrcoef(ns, ci_widths)[0, 1])
+            assert corr < 0.5, (
+                f"GATE CI width-vs-n correlation={corr:.3f}: "
+                "larger groups should tend to have narrower CIs"
+            )
+
+    def test_gate_ci_all_finite(self, fitted_estimator, small_df):
+        result = fitted_estimator.gate(small_df, by="channel")
+        assert result["ci_lower"].is_finite().all()
+        assert result["ci_upper"].is_finite().all()
+

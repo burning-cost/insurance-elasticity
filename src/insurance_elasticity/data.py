@@ -163,7 +163,7 @@ def make_renewal_data(
     intercept = (
         2.0                                          # ~88% base renewal at no price change
         - 0.3 * (channel == "pcw").astype(float)    # PCW base churn higher
-        + 0.1 * np.minimum(ncd_years, 3) * 0.1     # long-term NCD loyalty
+        + 0.1 * np.minimum(ncd_years, 3)            # long-term NCD loyalty (P2-1: removed erroneous extra * 0.1)
         + rng.normal(0, 0.05, size=n)               # individual unobserved heterogeneity
     )
     log_odds = intercept + true_elasticity * log_price_change
