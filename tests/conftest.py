@@ -9,7 +9,11 @@ import numpy as np
 import polars as pl
 import pytest
 
-econml = pytest.importorskip("econml", reason="econml not installed — skipping elasticity tests")
+try:
+    import econml  # noqa: F401
+    _ECONML_AVAILABLE = True
+except ImportError:
+    _ECONML_AVAILABLE = False
 
 from insurance_elasticity.data import make_renewal_data
 
@@ -31,6 +35,8 @@ def fitted_estimator(small_df):
     uses honest splitting which splits the subsample in two). With n_folds=2,
     n_estimators must be divisible by 4. We use 40.
     """
+    if not _ECONML_AVAILABLE:
+        pytest.skip("econml not installed")
     from insurance_elasticity.fit import RenewalElasticityEstimator
     est = RenewalElasticityEstimator(
         cate_model="causal_forest",
