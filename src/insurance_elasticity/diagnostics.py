@@ -235,7 +235,10 @@ class ElasticityDiagnostics:
 
         D_tilde = D - D_hat
         residual_var = float(np.var(D_tilde, ddof=1))
-        variation_fraction = residual_var / treatment_var
+        # Clip to [0, 1]: cross_val_predict residuals can marginally exceed Var(D)
+        # on small datasets when OOF predictions are slightly anti-correlated
+        # with the treatment (a known edge case with tree models and low n_folds).
+        variation_fraction = float(np.clip(residual_var / treatment_var, 0.0, 1.0))
 
         weak = (
             variation_fraction < _MIN_VARIATION_FRACTION
