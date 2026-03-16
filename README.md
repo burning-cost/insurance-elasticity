@@ -170,7 +170,7 @@ The standard treatment is `log(offer_price / last_year_price)`. This gives a sem
 
 **LinearDML**: assumes constant elasticity (or heterogeneity only through explicitly interacted features). Much faster. Right for quick portfolio-level ATE estimation.
 
-**CatBoost nuisance models**: UK insurance data is full of categoricals (region, vehicle group, occupation, payment method). CatBoost handles them natively. The alternative is to one-hot encode everything and use gradient boosting, which works but requires more care.
+**CatBoost nuisance models**: UK insurance data is full of categoricals (region, vehicle group, occupation, payment method). CatBoost is the default nuisance model choice. Note: the library currently one-hot encodes categorical columns before fitting (via _extract_arrays), so the native CatBoost categorical handling is not active. Passing pre-encoded features or a custom outcome_model / treatment_model will get you there faster than the default path.
 
 ---
 

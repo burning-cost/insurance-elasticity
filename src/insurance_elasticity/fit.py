@@ -18,10 +18,13 @@ Why CausalForestDML by default:
 
 Why CatBoost for nuisance models:
     UK motor and home insurance data contains many categorical features (region,
-    vehicle group, occupation, payment method). CatBoost handles these natively
-    without manual encoding. It also provides calibrated probability outputs for
-    the binary outcome nuisance model, which matters when computing Pearson-style
-    residuals.
+    vehicle group, occupation, payment method). CatBoost is the default nuisance
+    model choice for its strong out-of-the-box performance on tabular data.
+    Note: the library currently one-hot encodes categoricals via _extract_arrays
+    before fitting, so CatBoost native categorical support is not active.
+    CatBoost still benefits here from its regularisation and handling of numeric
+    splits. It also provides calibrated probability outputs for the binary
+    outcome nuisance model, which matters when computing Pearson-style residuals.
 
 Log-log specification:
     We set treatment = log(offer_price / last_year_price). With binary outcome Y
@@ -463,8 +466,8 @@ class RenewalElasticityEstimator:
         elif self.cate_model == "dr_learner":
             if not self.binary_outcome:
                 raise ValueError(
-                    "DRLearner requires binary_outcome=True (binary treatment/outcome). "
-                    "Use 'causal_forest' or 'linear_dml' for continuous treatment."
+                    "DRLearner requires binary_outcome=True (binary outcome). "
+                    "DRLearner supports continuous treatment but requires a binary or discrete "                    "outcome. Use 'causal_forest' or 'linear_dml' for continuous outcomes."
                 )
             return DRLearner(
                 model_regression=model_y,

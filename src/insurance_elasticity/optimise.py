@@ -160,23 +160,25 @@ class RenewalPricingOptimiser:
         current_log_change = df["log_price_change"].to_numpy()
         y = df["renewed"].to_numpy()
 
-        # Baseline renewal probability estimate (from training data prevalence
-        # for this segment — approximated as observed Y)
-        # We use a simple approach: P0 = group renewal rate (by sign of CATE quartile)
-        # For optimisation we use: P(renew | new_price) = P0 + theta * delta_log_price
-        # where delta_log_price = log(new_price / offer_price)
-        # Known limitation (P1-1): using the raw 0/1 renewal indicator as the
-        # per-customer baseline probability is noisy at the individual level (a
-        # customer who churned last year has p0=0, inflating predicted renewal
-        # at any price). The portfolio average is approximately correct because
-        # the smoothing below pulls each customer toward the mean renewal rate.
-        # A proper fix would use a calibrated propensity score from the fitted
-        # nuisance model. For pricing optimisation, the error is second-order:
-        # the CATE (not p0) drives price recommendations.
-        p0 = y.astype(float)  # per-row observed renewal (0 or 1)
-        # Smooth with an overall mean to reduce individual-level 0/1 noise
+        # Baseline renewal probability P0 = E[renew | X, current_price].
+        #
+        # Ideal approach: use the fitted nuisance model E[Y|X] from the DML fit.
+        # That model already estimates the conditional renewal probability for each
+        # policy, conditioning on the same confounders used in the elasticity estimate.
+        #
+        # Current approximation: use the overall mean renewal rate as a neutral
+        # baseline for all policies. This is unbiased at the portfolio level and
+        # avoids the bimodal 0/1 problem that arises from using observed Y directly
+        # (which is perfectly correlated with the outcome variable and creates a
+        # backward-looking baseline: lapsed customers get P0~0.2*rate, renewed
+        # customers get P0~0.8+0.2*rate — a systematic under/over-estimation).
+        #
+        # The mean-baseline approximation works best for small price changes
+        # (<20%) where the linear demand approximation is valid. For larger
+        # changes or high-heterogeneity portfolios, expose the nuisance model
+        # via RenewalElasticityEstimator and pass predicted probabilities here.
         overall_rate = float(np.mean(y))
-        p0_smoothed = 0.2 * overall_rate + 0.8 * p0
+        p0_smoothed = np.full(len(y), overall_rate)
 
         floor_prices = tech_prem * self.floor_loading
         ceiling_prices = np.minimum(enbp, last_prem * 1.5)  # additional sanity cap
