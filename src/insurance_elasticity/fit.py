@@ -222,29 +222,24 @@ class RenewalElasticityEstimator:
         """
         self._check_fitted()
         X = self._X_train
-        # Use effect(X).mean() as point estimate — works for all estimator types
-        # (CausalForestDML.ate_() only works for discrete treatments; LinearDML.ate_
-        # does not exist in all versions). ate_interval() provides the CI.
+        # Use effect(X).mean() as the point estimate — works for all estimator
+        # types (CausalForestDML.ate_() only works for discrete treatments;
+        # LinearDML.ate_ does not exist in all versions).
         #
-        # P2-2: _X_train is released after the first ate() call to avoid holding
-        # the full training array in memory. Subsequent calls use the estimator's
-        # internal cached data (no X kwarg). On the first call, we pass X for
-        # econml versions that require it.
-        if X is not None:
-            try:
-                result = self._estimator.ate_interval(X=X, alpha=0.05)
-            except TypeError:
-                result = self._estimator.ate_interval(alpha=0.05)
-            ate_point = float(np.mean(self._estimator.effect(X)))
-            # P2-2 fix: release training data reference to avoid memory leak
-            self._X_train = None
-        else:
-            # Second call: training data already released; use estimator's cached data
-            result = self._estimator.ate_interval(alpha=0.05)
-            ate_point = float(result[0].mean() + result[1].mean()) / 2  # midpoint fallback
+        # econml >= 0.16 requires X to be passed explicitly to ate_interval();
+        # passing X=None raises a ValueError. _X_train is always kept so that
+        # ate() can be called multiple times on the same fitted instance.
+        if X is None:
+            raise RuntimeError(
+                "ate() requires training data (X) to be available. "
+                "This should not happen on a freshly fitted estimator. "
+                "Re-fit the estimator and try again."
+            )
         # P0-1 fix: ate_interval() returns arrays of shape (n_samples, 1).
         # Take the mean across all rows to get the portfolio-average CI, not
         # the first row's CI.
+        result = self._estimator.ate_interval(X=X, alpha=0.05)
+        ate_point = float(np.mean(self._estimator.effect(X)))
         lb = float(result[0].mean())
         ub = float(result[1].mean())
         return ate_point, lb, ub
@@ -536,7 +531,7 @@ def _extract_arrays(
     D = df_pd[treatment].values.astype(float)
 
     subset = df_pd[confounders].copy()
-    obj_cols = subset.select_dtypes(include=["object", "category"]).columns.tolist()
+    obj_cols = subset.select_dtypes(include=["object", "category", "string"]).columns.tolist()
     if obj_cols:
         # P1-2 fix: do not use drop_first=True. Using drop_first=True can cause
         # column misalignment between training and scoring when category sets
