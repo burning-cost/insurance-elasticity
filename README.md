@@ -5,6 +5,8 @@
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![License](https://img.shields.io/badge/license-BSD--3-blue)]()
 
+> 💬 Questions or feedback? Start a [Discussion](https://github.com/burning-cost/insurance-elasticity/discussions). Found it useful? A ⭐ helps others find it.
+
 Causal price elasticity estimation and FCA PS21/5-compliant renewal pricing optimisation for UK personal lines — because naively regressing renewal flag on price in a formula-rated book measures confounding, not elasticity.
 
 ---
