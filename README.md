@@ -11,16 +11,16 @@ Causal price elasticity estimation and FCA PS21/5-compliant renewal pricing opti
 
 ## Why bother
 
-Benchmarked against naive OLS elasticity (logistic regression with confounders) on synthetic UK motor renewal data — 50,000 policies, known DGP with heterogeneous true elasticities by NCD band and age.
+Benchmarked against naive OLS elasticity (logistic regression with confounders) on 50,000 synthetic UK motor renewal records with known DGP. Results from Databricks run, 2026-03-16.
 
-| Metric | OLS Naive | LinearDML | CausalForestDML |
-|--------|-----------|-----------|-----------------|
-| ATE relative bias vs truth | 20-80% | 1-10% | 1-10% |
-| NCD GATE RMSE | Baseline | N/A | 30-60% better |
-| 95% CI covers true ATE | No | Yes | Yes |
-| Fit time relative to OLS | 1x | 30x-60x | 100x-300x |
+| Metric | OLS Naive | DML (HistGBM nuisance) |
+|--------|-----------|------------------------|
+| ATE relative bias (prob scale) | 24.5% | 21.8% |
+| NCD GATE RMSE | 0.0855 | 0.0448 (-47.6%) |
+| 95% CI covers true ATE | No | Yes |
+| Fit time (35k train) | 2.5s | 6.4s |
 
-OLS in a formula-rated book measures the correlation between risk level and renewal propensity, not the causal price effect. DML residualises both outcome and price on the same confounder set, recovering a credible causal semi-elasticity.
+OLS in a formula-rated book measures the correlation between risk level and renewal propensity, not the causal price effect. DML residualises both outcome and price on the same confounder set, recovering a credible causal semi-elasticity. The key advantage is in segment-level heterogeneous effects: DML recovers NCD-band elasticity gradients 47.6% more accurately.
 
 ---
 
@@ -176,18 +176,26 @@ The standard treatment is `log(offer_price / last_year_price)`. This gives a sem
 
 ## Performance
 
-Benchmarked against **naive OLS elasticity** (logistic regression with confounders) on synthetic UK motor insurance renewal data (50,000 policies, known DGP, 70/15/15 train/cal/test split). See `notebooks/benchmark.py` for full methodology.
+Benchmarked against **naive OLS elasticity** (logistic regression with confounders) on 50,000 synthetic UK motor renewal records with known DGP (70/15/15 train/cal/test split). Run on Databricks serverless compute, 2026-03-16. See `benchmarks/run_benchmark.py` for full methodology.
 
-The DGP has heterogeneous true elasticities: -3.5 for no-NCD customers to -1.0 for max-NCD, and -3.0 for age 17-24 to -1.2 for age 65+, with PCW customers 30% more elastic. This mirrors the structure of a real UK motor renewal book.
+**DGP design:** High-risk customers (low NCD, young, group D-F vehicle) face larger systematic price increases AND have lower base renewal probability. This creates positive confounding bias in OLS — the naive regression conflates the risk effect with the price effect.
 
-| Metric | OLS Naive | LinearDML | CausalForestDML |
-|--------|-----------|-----------|-----------------|
-| ATE relative bias vs truth | 20-80% | 1-10% | 1-10% |
-| NCD GATE RMSE | Baseline | N/A | 30-60% better |
-| 95% CI covers true ATE | N/A | Yes | Yes |
-| Fit time relative to OLS | 1x | 30x-60x | 100x-300x |
+**Metrics are on the probability scale** (average marginal effect: expected change in P(renew) per unit of log price change). True ATEs by NCD band range from -0.28 (NCD 0, most elastic) to -0.10 (NCD 5, least elastic).
 
-OLS elasticity in a formula-rated book measures the correlation between risk level and renewal propensity — not the causal price effect. DML residualises both outcome and price on the same confounder set, recovering a credible causal semi-elasticity. The NCD GATE RMSE improvement is largest on books where the renewal population has strong segment-level price sensitivity heterogeneity.
+| Metric | OLS logistic AME | DML (HistGBM nuisance) |
+|--------|-----------------|------------------------|
+| Portfolio ATE estimate | -0.194 | **-0.122** |
+| True portfolio ATE | -0.156 | -0.156 |
+| ATE relative bias | 24.5% | **21.8%** |
+| 95% CI covers true ATE | N/A | **Yes** |
+| NCD GATE RMSE | 0.0855 | **0.0448** (-47.6%) |
+| Fit time (35k train) | 2.5s | 6.4s |
+
+**Where DML wins:** The 47.6% reduction in NCD GATE RMSE is the key result. OLS misranks the NCD bands because the confounding is unevenly distributed (low-NCD customers face both the largest systematic price increases and the lowest base renewal rates). DML's cross-fitting removes this. The segment-level heterogeneity — who is most price-sensitive — is what actually feeds into pricing decisions, not the portfolio average.
+
+**The ATE comparison:** Both methods have meaningful bias in this partially-observable setting. The important difference is that DML provides a valid 95% confidence interval (covers the true value) while OLS has no interval at all. OLS is a point estimate from a mis-specified model; DML is an estimate with honest uncertainty quantification.
+
+**When to expect larger OLS bias:** The benchmark uses `price_variation_sd=0.08` — enough exogenous variation to identify the effect. In a tighter pricing grid (less A/B testing, more formula-driven re-rating), OLS bias will increase substantially while DML remains consistent.
 
 ---
 
