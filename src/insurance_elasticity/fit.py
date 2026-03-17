@@ -52,7 +52,7 @@ KB entries 593, 594, 600.
 
 from __future__ import annotations
 
-from math import sqrt
+from math import sqrt, gcd
 from typing import Optional, Sequence, Union
 import warnings
 
@@ -436,13 +436,18 @@ class RenewalElasticityEstimator:
             ) from e
 
         if self.cate_model == "causal_forest":
-            # n_estimators must be divisible by n_folds * 2 (honest splitting)
+            # n_estimators must be divisible by:
+            # - n_folds * 2 (CausalForestDML honest splitting requirement)
+            # - 4 (econml's default subforest_size)
+            # Use LCM to satisfy both constraints simultaneously.
             n_est = self.n_estimators
             divisor = self.n_folds * 2
-            if n_est % divisor != 0:
-                n_est = ((n_est // divisor) + 1) * divisor
+            # LCM(divisor, 4) ensures divisibility by both n_folds*2 and subforest_size=4
+            required_divisor = (divisor * 4) // gcd(divisor, 4)
+            if n_est % required_divisor != 0:
+                n_est = ((n_est // required_divisor) + 1) * required_divisor
                 warnings.warn(
-                    f"n_estimators={self.n_estimators} is not divisible by n_folds*2={divisor}. "
+                    f"n_estimators={self.n_estimators} is not divisible by LCM(n_folds*2, 4)={required_divisor}. "
                     f"Rounding up to {n_est}.",
                     UserWarning,
                     stacklevel=3,
