@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "insurance-elasticity"
-version = "0.1.5"
+version = "0.1.6"
 description = "Causal price elasticity estimation and FCA-compliant renewal pricing optimisation for UK insurance"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -49,14 +49,14 @@ dependencies = [
 
 [project.optional-dependencies]
 causal = [
-    "econml>=0.15",
+    "econml>=0.15,<0.16",
     "catboost>=1.2",
 ]
 plot = [
     "matplotlib>=3.7",
 ]
 all = [
-    "econml>=0.15",
+    "econml>=0.15,<0.16",
     "catboost>=1.2",
     "matplotlib>=3.7",
 ]
@@ -64,7 +64,7 @@ dev = [
     "pytest>=7.0",
     "pyarrow>=12.0",
     "pytest-cov>=4.0",
-    "econml>=0.15",
+    "econml>=0.15,<0.16",
     "catboost>=1.2",
     "matplotlib>=3.7",
 ]
