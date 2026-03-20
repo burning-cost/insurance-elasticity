@@ -1,42 +1,14 @@
-"""
-insurance-elasticity: Causal price elasticity estimation and FCA-compliant
-renewal pricing optimisation for UK personal lines insurance.
+import warnings
 
-Quick start
------------
->>> from insurance_elasticity.data import make_renewal_data
->>> from insurance_elasticity.fit import RenewalElasticityEstimator
->>> from insurance_elasticity.optimise import RenewalPricingOptimiser
->>> from insurance_elasticity.surface import ElasticitySurface
->>> from insurance_elasticity.demand import demand_curve, plot_demand_curve
->>> from insurance_elasticity.diagnostics import ElasticityDiagnostics
+warnings.warn(
+    "insurance-elasticity is deprecated. Use insurance-causal instead:\n"
+    "  pip install insurance-causal\n"
+    "  from insurance_causal.elasticity import RenewalElasticityEstimator\n"
+    "  from insurance_causal.elasticity import RenewalPricingOptimiser, ElasticitySurface\n"
+    "This package will be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
->>> df = make_renewal_data(n=10_000)
->>> confounders = ["age", "ncd_years", "vehicle_group", "region", "channel"]
->>> est = RenewalElasticityEstimator()
->>> est.fit(df, confounders=confounders)
->>> ate, lb, ub = est.ate()
->>> print(f"ATE: {ate:.3f}  95% CI: [{lb:.3f}, {ub:.3f}]")
-"""
-
-from insurance_elasticity.fit import RenewalElasticityEstimator
-from insurance_elasticity.surface import ElasticitySurface
-from insurance_elasticity.optimise import RenewalPricingOptimiser
-from insurance_elasticity.diagnostics import ElasticityDiagnostics, TreatmentVariationReport
-from insurance_elasticity.demand import demand_curve, plot_demand_curve
-from insurance_elasticity.data import make_renewal_data, true_gate_by_ncd, true_gate_by_age
-
-__version__ = "0.1.1"
-
-__all__ = [
-    "RenewalElasticityEstimator",
-    "ElasticitySurface",
-    "RenewalPricingOptimiser",
-    "ElasticityDiagnostics",
-    "TreatmentVariationReport",
-    "demand_curve",
-    "plot_demand_curve",
-    "make_renewal_data",
-    "true_gate_by_ncd",
-    "true_gate_by_age",
-]
+# Re-export everything from the new location for backwards compatibility
+from insurance_causal.elasticity import *  # noqa: F401,F403
