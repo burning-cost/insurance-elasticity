@@ -1,3 +1,5 @@
+⚠️ **This package has been merged into [`insurance-causal`](https://github.com/burning-cost/insurance-causal).** This repository is archived. Install `insurance-causal` instead.
+
 # insurance-elasticity — Deprecated
 
 This package has been superseded by [insurance-causal](https://github.com/burning-cost/insurance-causal).
